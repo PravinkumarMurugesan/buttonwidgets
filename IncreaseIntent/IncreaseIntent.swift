@@ -6,29 +6,40 @@
 //
 
 import WidgetKit
+import AppIntents
 import SwiftUI
 
 struct Provider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent())
+        SimpleEntry(date: Date(), post: nil)
     }
 
     func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: configuration)
+        SimpleEntry(date: Date(), post: nil)
     }
     
     func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
-        var entries: [SimpleEntry] = []
-
+        
+        let url  = URL(string:"https://jsonplaceholder.typicode.com/posts/1")!
         // Generate a timeline consisting of five entries an hour apart, starting from the current date.
-        let currentDate = Date()
-        for hourOffset in 0 ..< 5 {
-            let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: currentDate)!
-            let entry = SimpleEntry(date: entryDate, configuration: configuration)
-            entries.append(entry)
+        var post : Post? = nil
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            post = try JSONDecoder().decode(Post.self, from: data)
+            if let post = post {
+                print(post)
+            } else {
+                print("Post is nil")
+            }
+        } catch {
+            print("API Error:", error)
         }
-
-        return Timeline(entries: entries, policy: .atEnd)
+        let entry =  SimpleEntry(date: Date(), post: post)
+        
+        let nextRefresh = Calendar.current.date(byAdding: .second, value: 10, to: Date())!
+        
+        return Timeline(entries: [entry], policy: .after(nextRefresh))
     }
 
 //    func relevances() async -> WidgetRelevances<ConfigurationAppIntent> {
@@ -38,20 +49,28 @@ struct Provider: AppIntentTimelineProvider {
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
-    let configuration: ConfigurationAppIntent
+    let post : Post?
 }
+
 
 struct IncreaseIntentEntryView : View {
     var entry: Provider.Entry
 
     var body: some View {
-        VStack {
-            Text("Time:")
-            Text(entry.date, style: .time)
-
-            Text("Favorite Emoji:")
-            Text(entry.configuration.favoriteEmoji)
-        }
+        VStack(alignment: .leading) {
+            if let post = entry.post {
+                Text("User ID : \(String(post.userId))")
+                    .font(.caption)
+                Text("Id :\(String(post.id))")
+                    .font(.caption)
+                Text("Title :\(post.title)")
+                    .font(.headline)
+                Text("Body : \(post.body)")
+                    .font(.caption)
+            } else {
+                Text("Loading...")
+            }
+        }.padding()
     }
 }
 
@@ -63,6 +82,10 @@ struct IncreaseIntent: Widget {
             IncreaseIntentEntryView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
+        .configurationDisplayName("Counter Widgets")
+        .description("Increase or decrease widgets")
+        //.supportedFamilies([.systemSmall])
+        
     }
 }
 
@@ -83,6 +106,6 @@ extension ConfigurationAppIntent {
 #Preview(as: .systemSmall) {
     IncreaseIntent()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .smiley)
-    SimpleEntry(date: .now, configuration: .starEyes)
+    SimpleEntry(date: .now, post: nil)
+    //SimpleEntry(date: .now, configuration: .starEyes)
 }
